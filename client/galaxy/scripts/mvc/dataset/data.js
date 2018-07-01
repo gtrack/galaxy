@@ -221,15 +221,15 @@ var TabularDatasetChunkedView = Backbone.View.extend({
 
     // -- Helper functions. --
 
-    _renderCell: function(cell_contents, index, colspan) {
+    _renderCell: function(cell_contents, index, is_comment, colspan) {
         var $cell = $("<td>").text(cell_contents);
         var column_types = this.model.get_metadata("column_types");
         if (colspan !== undefined) {
             $cell.attr("colspan", colspan).addClass("stringalign");
         } else if (column_types) {
             if (index < column_types.length) {
-                if (column_types[index] === "str" || column_types[index] === "list") {
-                    /* Left align all str columns, right align the rest */
+                if (is_comment || column_types[index] === "str" || column_types[index] === "list") {
+                    /* Left align all comment lines and str columns, right align the rest */
                     $cell.addClass("stringalign");
                 }
             }
@@ -243,6 +243,7 @@ var TabularDatasetChunkedView = Backbone.View.extend({
 
         var row = $("<tr>");
         var num_columns = this.model.get_metadata("columns");
+        var is_comment = line.startsWith("#");
 
         if (this.row_count % 2 !== 0) {
             row.addClass("dark_row");
@@ -252,7 +253,7 @@ var TabularDatasetChunkedView = Backbone.View.extend({
             _.each(
                 cells,
                 function(cell_contents, index) {
-                    row.append(this._renderCell(cell_contents, index));
+                    row.append(this._renderCell(cell_contents, index, is_comment));
                 },
                 this
             );
@@ -261,35 +262,40 @@ var TabularDatasetChunkedView = Backbone.View.extend({
             _.each(
                 cells.slice(0, num_columns - 1),
                 function(cell_contents, index) {
-                    row.append(this._renderCell(cell_contents, index));
+                    row.append(this._renderCell(cell_contents, index, is_comment));
                 },
                 this
             );
-            row.append(this._renderCell(cells.slice(num_columns - 1).join("\t"), num_columns - 1));
+            row.append(this._renderCell(cells.slice(num_columns - 1).join("\t"), num_columns - 1, is_comment));
         } else if (cells.length === 1) {
-            cells = line.split(",");
-            if (cells.length === num_columns) {
-                _.each(
-                    cells,
-                    function(cell_contents, index) {
-                        row.append(this._renderCell(cell_contents, index));
-                    },
-                    this
-                );
-            } else {
-                cells = line.split(" ");
+            if (!is_comment) {
+                cells = line.split(",");
                 if (cells.length === num_columns) {
                     _.each(
                         cells,
-                        function(cell_contents, index) {
+                        function (cell_contents, index) {
                             row.append(this._renderCell(cell_contents, index));
                         },
                         this
                     );
                 } else {
-                    // Comment line, just return the one cell.
-                    row.append(this._renderCell(line, 0, num_columns));
+                    cells = line.split(" ");
+                    if (cells.length === num_columns) {
+                        _.each(
+                            cells,
+                            function (cell_contents, index) {
+                                row.append(this._renderCell(cell_contents, index));
+                            },
+                            this
+                        );
+                    } else {
+                        is_comment = true;
+                    }
                 }
+            }
+            if (is_comment) {
+                // Comment line. Return the one cell, spanning all columns.
+                row.append(this._renderCell(line, 0, is_comment, num_columns));
             }
         } else {
             // cells.length is greater than one, but less than num_columns.  Render cells and pad tds.
